@@ -8,7 +8,7 @@ Pasted pieces sit on top of your photo. They hide what's underneath without eras
 
 ## Use it in your browser
 
-Open **[photo-patch.vercel.app](https://photo-patch.vercel.app)**. There's nothing to install, and it has every feature of the app. Your pictures stay on your device: nothing is uploaded.
+Open **[photo-patch.vercel.app](https://photo-patch.vercel.app)**. The site first offers the Windows app; choose **Continue in browser** to use it right there, with nothing to install. It has every feature of the app, and your pictures stay on your device: nothing is uploaded.
 
 In Chrome and Edge, *Save* opens a normal "Save as" window. In other browsers, you pick a name and format, and the picture goes to your downloads folder. Saved signatures are kept in that browser.
 
