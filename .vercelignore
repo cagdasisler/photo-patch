@@ -1,0 +1,7 @@
+# Upload only what the web build needs (no Electron, no node_modules, no installers).
+/*
+!/src
+!/web
+!/scripts
+!/build
+!/vercel.json

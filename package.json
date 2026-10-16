@@ -10,7 +10,10 @@
   "scripts": {
     "start": "electron .",
     "icon": "node scripts/make-icon.js",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win",
+    "web:build": "node scripts/build-web.js",
+    "web:preview": "node scripts/build-web.js && npx --yes serve@14.2.4 web-dist",
+    "web:deploy": "vercel --prod"
   },
   "build": {
     "appId": "app.photopatch.desktop",

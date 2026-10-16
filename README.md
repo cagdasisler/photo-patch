@@ -6,7 +6,13 @@ Photo Patch is a small Windows desktop app for one job: copy a box from a pictur
 
 Pasted pieces sit on top of your photo. They hide what's underneath without erasing it, so you can move, resize or remove any piece at any time before you save.
 
-## Download
+## Use it in your browser
+
+Open **[photo-patch.vercel.app](https://photo-patch.vercel.app)**. There's nothing to install, and it has every feature of the app. Your pictures stay on your device: nothing is uploaded.
+
+In Chrome and Edge, *Save* opens a normal "Save as" window. In other browsers, you pick a name and format, and the picture goes to your downloads folder. Saved signatures are kept in that browser.
+
+## Download the Windows app
 
 Get the latest version from the [Releases page](https://github.com/cagdasisler/photo-patch/releases):
 
@@ -66,9 +72,13 @@ npm install
 npm start        # run the app
 npm run dist     # build the Windows installer and portable .exe into dist/
 npm run icon     # regenerate build/icon.png
+
+npm run web:build    # build the web version into web-dist/
+npm run web:preview  # build it and serve it locally
+npm run web:deploy   # publish it to Vercel (needs the Vercel CLI and `vercel login`)
 ```
 
-Photo Patch is built with [Electron](https://www.electronjs.org/) and plain HTML, CSS and JavaScript, with no frameworks.
+Photo Patch is built with [Electron](https://www.electronjs.org/) and plain HTML, CSS and JavaScript, with no frameworks. The web version runs the same `src/` code: the files in `web/` replace Electron's file dialogs and storage with browser features, and add the download link.
 
 ## Author
 
