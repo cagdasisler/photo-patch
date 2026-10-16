@@ -949,3 +949,64 @@ body.dropping .drop-hint {
     transition: none;
   }
 }
+
+/* ---------- PDF pages ---------- */
+
+.page-bar {
+  position: absolute;
+  bottom: 34px;
+  left: 50%;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 38px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transform: translateX(-50%);
+}
+
+.page-bar button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.page-bar button:hover:not(:disabled) {
+  background: var(--surface-raised);
+  color: var(--text);
+}
+
+.page-bar button:disabled {
+  color: var(--faint);
+  opacity: 0.5;
+  cursor: default;
+}
+
+.page-bar svg {
+  width: 18px;
+  height: 18px;
+}
+
+#page-label {
+  min-width: 96px;
+  text-align: center;
+}
+
+/* Messages show above the page switcher. */
+body.has-pages .toast {
+  bottom: 84px;
+}

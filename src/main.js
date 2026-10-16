@@ -4,8 +4,14 @@ const { app, BrowserWindow, dialog, ipcMain, Menu, screen } = require('electron'
 const fs = require('fs/promises');
 const path = require('path');
 
-const OPEN_EXTENSIONS = ['png', 'jpg', 'jpeg', 'jfif', 'webp', 'gif', 'bmp', 'avif'];
-const SAVE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'];
+const OPEN_EXTENSIONS = ['png', 'jpg', 'jpeg', 'jfif', 'webp', 'gif', 'bmp', 'avif', 'pdf'];
+const SAVE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'pdf'];
+const SAVE_FILTERS = [
+  { name: 'PNG picture (best quality)', extensions: ['png'] },
+  { name: 'JPEG picture (smaller file)', extensions: ['jpg', 'jpeg'] },
+  { name: 'WebP picture', extensions: ['webp'] },
+  { name: 'PDF document', extensions: ['pdf'] },
+];
 const MAX_SIGNATURES = 50;
 const MAX_SIGNATURE_CHARS = 8 * 1024 * 1024;
 const TITLE_BAR_HEIGHT = 36; // Matches .titlebar in styles.css
@@ -98,10 +104,10 @@ function createWindow() {
 
 ipcMain.handle('open-image', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-    title: 'Open a picture',
+    title: 'Open a picture or PDF',
     properties: ['openFile'],
     filters: [
-      { name: 'Pictures', extensions: OPEN_EXTENSIONS },
+      { name: 'Pictures and PDFs', extensions: OPEN_EXTENSIONS },
       { name: 'All files', extensions: ['*'] },
     ],
   });
@@ -116,14 +122,14 @@ ipcMain.handle('startup-image', async () => {
 });
 
 ipcMain.handle('choose-save-path', async (_event, suggestedPath) => {
+  const defaultPath = suggestedPath || 'edited.png';
+  // The suggested file's type comes first, so the dialog starts on it (PDF for a PDF).
+  const ext = extensionOf(defaultPath);
+  const filters = [...SAVE_FILTERS].sort((a, b) => b.extensions.includes(ext) - a.extensions.includes(ext));
   const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
     title: 'Save edited picture',
-    defaultPath: suggestedPath || 'edited.png',
-    filters: [
-      { name: 'PNG picture (best quality)', extensions: ['png'] },
-      { name: 'JPEG picture (smaller file)', extensions: ['jpg', 'jpeg'] },
-      { name: 'WebP picture', extensions: ['webp'] },
-    ],
+    defaultPath,
+    filters,
   });
   if (canceled || !filePath) return null;
   const finalPath = SAVE_EXTENSIONS.includes(extensionOf(filePath)) ? filePath : `${filePath}.png`;

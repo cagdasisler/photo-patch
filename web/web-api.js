@@ -4,11 +4,12 @@
 // built on web features, so renderer.js and signatures.js run unchanged.
 // Everything stays in the visitor's browser; no picture is ever uploaded.
 (() => {
-  const OPEN_ACCEPT = 'image/*,.png,.jpg,.jpeg,.jfif,.webp,.gif,.bmp,.avif';
+  const OPEN_ACCEPT = 'image/*,application/pdf,.png,.jpg,.jpeg,.jfif,.webp,.gif,.bmp,.avif,.pdf';
   const SAVE_TYPES = {
     png: { label: 'PNG picture (best quality)', mime: 'image/png', exts: ['.png'] },
     jpg: { label: 'JPEG picture (smaller file)', mime: 'image/jpeg', exts: ['.jpg', '.jpeg'] },
     webp: { label: 'WebP picture', mime: 'image/webp', exts: ['.webp'] },
+    pdf: { label: 'PDF document', mime: 'application/pdf', exts: ['.pdf'] },
   };
   const MAX_SIGNATURES = 50;
   const MAX_SIGNATURE_CHARS = 8 * 1024 * 1024;
@@ -44,12 +45,14 @@
     const suggested = baseName(suggestedPath) || 'edited.png';
     if (typeof window.showSaveFilePicker === 'function') {
       try {
+        // The suggested file's type comes first, so the picker starts on it (PDF for a PDF).
+        const ext = extensionOf(suggested);
+        const types = Object.values(SAVE_TYPES).sort(
+          (a, b) => b.exts.includes('.' + ext) - a.exts.includes('.' + ext),
+        );
         const handle = await window.showSaveFilePicker({
           suggestedName: suggested,
-          types: Object.values(SAVE_TYPES).map(({ label, mime, exts }) => ({
-            description: label,
-            accept: { [mime]: exts },
-          })),
+          types: types.map(({ label, mime, exts }) => ({ description: label, accept: { [mime]: exts } })),
         });
         // The editor picks the format from the extension, and writes PNG for anything else.
         saveHandles.set(handle.name, handle);
@@ -90,7 +93,7 @@
     d.innerHTML = `
       <form method="dialog">
         <header class="sign-head">
-          <h2 id="web-save-title">Save edited picture</h2>
+          <h2 id="web-save-title">Save your edits</h2>
         </header>
         <div class="web-save-body">
           <label class="web-field">
@@ -132,7 +135,7 @@
         'close',
         () => {
           if (saveDialog.returnValue !== 'save') return resolve(null);
-          const base = form.elements.name.value.trim().replace(/[\\/:*?"<>|]+/g, '-').replace(/\.(png|jpe?g|webp)$/i, '') || 'edited';
+          const base = form.elements.name.value.trim().replace(/[\\/:*?"<>|]+/g, '-').replace(/\.(png|jpe?g|webp|pdf)$/i, '') || 'edited';
           const name = `${base}.${form.elements.format.value}`;
           saveHandles.delete(name);
           resolve(name);

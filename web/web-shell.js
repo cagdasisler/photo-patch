@@ -70,7 +70,7 @@
     if (isWindows) {
       body = `
         <h1 id="gate-title">Get the Photo Patch app</h1>
-        <p class="gate-lead">Cover a blemish, hide something in the background, or sign a picture. The free Windows app is the best way to use Photo Patch.</p>
+        <p class="gate-lead">Cover a blemish, hide something in the background, or sign a picture or PDF. The free Windows app is the best way to use Photo Patch.</p>
         <ul class="gate-perks">${PERKS.map((p) => `<li>${ICON_CHECK}${p}</li>`).join('')}</ul>
         ${downloadLink('setup', 'primary gate-main', `${ICON_WINDOWS}Download for Windows`, ' autofocus')}
         <p class="gate-meta">${meta()}</p>

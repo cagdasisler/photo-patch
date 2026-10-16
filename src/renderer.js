@@ -59,6 +59,11 @@ const state = {
   showOriginal: false,
   matchLight: false, // new pastes match the light where they're put
   dirty: false,
+  pdf: null, // the open PDF (see pdf.js), or null when the picture is an image
+  // A PDF's pages: { width, height (points), image, pieces, undo, redo }. The page on screen
+  // works through the fields above; its own entry catches up when another page is shown.
+  pages: [],
+  pageIndex: 0,
 };
 
 const view = { scale: 1, ox: 0, oy: 0, fit: true }; // screen = picture * scale + offset
@@ -111,7 +116,10 @@ function syncCanvasSize(canvas) {
 // (or only the first `count` pieces, to see what lies under a piece).
 function drawComposite(g, offsetX, offsetY, withPieces, count = state.pieces.length) {
   g.drawImage(state.image, -offsetX, -offsetY);
-  if (!withPieces) return;
+  if (withPieces) drawPieces(g, offsetX, offsetY, count);
+}
+
+function drawPieces(g, offsetX, offsetY, count = state.pieces.length) {
   const smoothing = g.imageSmoothingEnabled;
   for (let i = 0; i < count; i++) {
     const p = state.pieces[i];
@@ -465,11 +473,13 @@ function render() {
   updatePopovers();
 }
 
-// The part of the stage between the hint line at the top and the file name at the bottom.
+// The part of the stage between the hint line at the top and the file name at the bottom
+// (and the page switcher, for a PDF with more than one page).
 function viewport() {
   const w = stage.clientWidth;
   const h = stage.clientHeight;
-  return { left: 20, top: 66, right: Math.max(w - 20, 120), bottom: Math.max(h - 38, 140) };
+  const below = state.pdf && state.pages.length > 1 ? 82 : 38;
+  return { left: 20, top: 66, right: Math.max(w - 20, 120), bottom: Math.max(h - below, 140) };
 }
 
 // Places a pop-over beside a box (picture pixels), flipping sides when there's no room.
@@ -549,6 +559,7 @@ function refreshUI() {
 
   document.body.classList.toggle('has-image', hasImage);
   emptyState.hidden = hasImage;
+  updatePageBar();
   updateZoomLabel();
   renderPieceList();
   updateHint();
@@ -930,32 +941,72 @@ async function decodeImage(blob) {
   }
 }
 
+// Opens a picture or a PDF (any file the open dialog or a drop hands over).
 async function loadImage(blob, name, filePath) {
+  if (PdfFiles.isPdf(new Uint8Array(await blob.slice(0, 1024).arrayBuffer()))) {
+    await loadPdf(blob, name, filePath);
+    return;
+  }
   let bitmap;
   try {
     bitmap = await decodeImage(blob);
   } catch {
-    showToast(`Couldn’t open “${name}”. Try a PNG, JPG, WebP, GIF or BMP picture.`, 'error');
+    showToast(`Couldn’t open “${name}”. Try a PDF, or a PNG, JPG, WebP, GIF or BMP picture.`, 'error');
     return;
   }
   if (!confirmDiscard()) {
     bitmap.close();
     return;
   }
+  startDocument(bitmap, name, filePath, null, []);
+}
 
+async function loadPdf(blob, name, filePath) {
+  let pdf;
+  let first;
+  try {
+    pdf = await PdfFiles.open(new Uint8Array(await blob.arrayBuffer()));
+    if (pdf.pages.length === 0) throw new Error('no pages');
+    first = await pdf.render(0);
+  } catch (err) {
+    pdf?.close();
+    showToast(
+      err instanceof PdfFiles.PasswordError
+        ? `“${name}” is locked with a password. Open an unlocked copy of it.`
+        : `Couldn’t open “${name}”. The PDF may be damaged.`,
+      'error',
+    );
+    return;
+  }
+  if (!confirmDiscard()) {
+    first.close();
+    pdf.close();
+    return;
+  }
+  const pages = pdf.pages.map(({ width, height }) => ({ width, height, image: null, pieces: [], undo: [], redo: [] }));
+  pages[0].image = first;
+  startDocument(first, name, filePath, pdf, pages);
+  if (pages.length > 1) showToast(`Opened ${pages.length} pages. Use the arrows at the bottom, or Page Up and Page Down, to switch.`);
+}
+
+function startDocument(bitmap, name, filePath, pdf, pages) {
+  state.pdf?.close();
   Object.assign(state, {
     image: bitmap,
     name,
     path: filePath || '',
     lastSavePath: '',
-    pieces: [],
+    pieces: pages[0]?.pieces || [],
     activeId: null,
     hoverId: null,
     selection: null,
     showOriginal: false,
+    pdf,
+    pages,
+    pageIndex: 0,
   });
-  history.undo.length = 0;
-  history.redo.length = 0;
+  history.undo = pages[0]?.undo || [];
+  history.redo = pages[0]?.redo || [];
   nextPieceId = 1;
   drag = null;
   sizeEl.textContent = `${bitmap.width} × ${bitmap.height} px`;
@@ -964,6 +1015,128 @@ async function loadImage(blob, name, filePath) {
   refreshUI(); // shows the panel first, so fitting knows how much room is left
   fitToView();
 }
+
+/* ------------------------------------------------------------------------ */
+/* PDF pages                                                                */
+/* ------------------------------------------------------------------------ */
+
+const pageBar = document.getElementById('page-bar');
+const pageLabel = document.getElementById('page-label');
+const PAGES_KEPT = 4; // drawn pages kept in memory; others are drawn again when shown
+let pageRequest = 0;
+
+// The shown page's pieces and history live in state and history; this files them back.
+function stashPage() {
+  const page = state.pages[state.pageIndex];
+  if (!page) return;
+  page.pieces = state.pieces;
+  page.undo = history.undo;
+  page.redo = history.redo;
+}
+
+async function pageImage(index) {
+  const page = state.pages[index];
+  if (!page.image) {
+    page.image = await state.pdf.render(index);
+    // Let go of the pages farthest from this one; they're quick to draw again.
+    const drawn = state.pages
+      .map((p, i) => ({ p, i }))
+      .filter(({ p, i }) => p.image && i !== index && p.image !== state.image)
+      .sort((a, b) => Math.abs(b.i - index) - Math.abs(a.i - index));
+    for (const { p } of drawn.slice(0, Math.max(0, drawn.length - (PAGES_KEPT - 2)))) {
+      p.image.close();
+      p.image = null;
+    }
+  }
+  return page.image;
+}
+
+async function showPage(index) {
+  if (!state.pdf || drag || saving || index < 0 || index >= state.pages.length || index === state.pageIndex) return;
+  const request = ++pageRequest;
+  const pdf = state.pdf;
+  let image;
+  try {
+    image = await pageImage(index);
+  } catch {
+    showToast(`Couldn’t show page ${index + 1}.`, 'error');
+    return;
+  }
+  if (request !== pageRequest || pdf !== state.pdf) return; // another page or file was picked meanwhile
+  stashPage();
+  const page = state.pages[index];
+  Object.assign(state, {
+    image,
+    pieces: page.pieces,
+    pageIndex: index,
+    activeId: null,
+    hoverId: null,
+    selection: null,
+    showOriginal: false,
+  });
+  history.undo = page.undo;
+  history.redo = page.redo;
+  sizeEl.textContent = `${image.width} × ${image.height} px`;
+  refreshUI();
+  fitToView();
+}
+
+function updatePageBar() {
+  const count = state.pdf ? state.pages.length : 0;
+  pageBar.hidden = count < 2;
+  document.body.classList.toggle('has-pages', count >= 2);
+  if (count < 2) return;
+  pageLabel.textContent = `Page ${state.pageIndex + 1} of ${count}`;
+  pageBar.querySelector('[data-action="page-prev"]').disabled = state.pageIndex === 0;
+  pageBar.querySelector('[data-action="page-next"]').disabled = state.pageIndex === count - 1;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Saving                                                                   */
+/* ------------------------------------------------------------------------ */
+
+// Draws one page as it will be saved, with that page standing in as the shown one for a
+// moment, so pieces that match the light see the right picture under them.
+async function drawPageForSave(page, layer) {
+  const image = state.pdf ? await pageImage(state.pages.indexOf(page)) : state.image;
+  const shown = { image: state.image, pieces: state.pieces };
+  const out = document.createElement('canvas');
+  out.width = image.width;
+  out.height = image.height;
+  const g = out.getContext('2d');
+  g.imageSmoothingQuality = 'high';
+  state.image = image;
+  state.pieces = page.pieces;
+  try {
+    if (layer === 'pieces') {
+      drawPieces(g, 0, 0);
+    } else {
+      g.fillStyle = '#fff'; // paper behind see-through pixels
+      g.fillRect(0, 0, out.width, out.height);
+      drawComposite(g, 0, 0, true);
+    }
+  } finally {
+    Object.assign(state, shown);
+  }
+  return out;
+}
+
+async function buildPdf() {
+  stashPage();
+  const pages = state.pdf
+    ? state.pages
+    : [{ ...PdfFiles.imagePageSize(state.image.width, state.image.height), pieces: state.pieces }];
+  // Signatures only add ink on top, so that page keeps its text. Anything else covers
+  // something up, and that page is flattened so the covered part is gone for real.
+  const plan = pages.map(({ width, height, pieces }) => ({
+    width,
+    height,
+    edit: pieces.length === 0 ? null : pieces.every((p) => p.kind === 'signature') ? 'overlay' : 'flatten',
+  }));
+  return PdfFiles.save(state.pdf, plan, (i, layer) => drawPageForSave(pages[i], layer));
+}
+
+let saving = false;
 
 async function openImageDialog() {
   const file = await window.api.openImage();
@@ -974,40 +1147,57 @@ function suggestedSavePath() {
   if (state.lastSavePath) return state.lastSavePath;
   const base = state.name.replace(/\.[^.]+$/, '') || 'picture';
   const folder = state.path ? state.path.slice(0, state.path.length - state.name.length) : '';
-  return `${folder}${base}-edited.png`;
+  return `${folder}${base}-edited.${state.pdf ? 'pdf' : 'png'}`;
 }
 
 async function saveImage() {
-  if (!state.image || drag) return;
+  if (!state.image || drag || saving) return;
   const filePath = await window.api.chooseSavePath(suggestedSavePath());
   if (!filePath) return;
 
-  const ext = filePath.split('.').pop().toLowerCase();
-  const type = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png';
-  const { width, height } = state.image;
-  const out = document.createElement('canvas');
-  out.width = width;
-  out.height = height;
-  const g = out.getContext('2d');
-  g.imageSmoothingQuality = 'high';
-  if (type === 'image/jpeg') {
-    g.fillStyle = '#fff'; // JPEG has no transparency
-    g.fillRect(0, 0, width, height);
-  }
-  drawComposite(g, 0, 0, true);
-
+  const fileName = filePath.split(/[\\/]/).pop();
+  const ext = fileName.split('.').pop().toLowerCase();
+  let bytes;
+  let done = `Saved ${fileName}`;
+  saving = true;
   try {
-    const blob = await new Promise((resolve, reject) => {
-      out.toBlob((b) => (b ? resolve(b) : reject(new Error('encode failed'))), type, 0.95);
-    });
-    await window.api.writeFile(filePath, new Uint8Array(await blob.arrayBuffer()));
+    if (ext === 'pdf') {
+      showToast('Saving the PDF…');
+      const result = await buildPdf();
+      bytes = result.bytes;
+      if (result.flattened > 0) done += '. Covered-up parts are gone for good, not just hidden.';
+    } else {
+      const type = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png';
+      const { width, height } = state.image;
+      const out = document.createElement('canvas');
+      out.width = width;
+      out.height = height;
+      const g = out.getContext('2d');
+      g.imageSmoothingQuality = 'high';
+      if (type === 'image/jpeg') {
+        g.fillStyle = '#fff'; // JPEG has no transparency
+        g.fillRect(0, 0, width, height);
+      }
+      drawComposite(g, 0, 0, true);
+      const blob = await new Promise((resolve, reject) => {
+        out.toBlob((b) => (b ? resolve(b) : reject(new Error('encode failed'))), type, 0.95);
+      });
+      bytes = new Uint8Array(await blob.arrayBuffer());
+      if (state.pdf && state.pages.length > 1) done = `Saved page ${state.pageIndex + 1} as ${fileName}. Save as PDF to keep every page.`;
+    }
+    await window.api.writeFile(filePath, bytes);
   } catch {
-    showToast('Couldn’t save the picture there. Try a different folder or name.', 'error');
+    showToast(`Couldn’t save ${ext === 'pdf' ? 'the PDF' : 'the picture'} there. Try a different folder or name.`, 'error');
     return;
+  } finally {
+    saving = false;
   }
-  state.lastSavePath = filePath;
-  setDirty(false);
-  showToast(`Saved ${filePath.split(/[\\/]/).pop()}`);
+  // A single page saved as a picture leaves the PDF's other edits unsaved.
+  if (ext === 'pdf' || !state.pdf || state.pages.length === 1) {
+    state.lastSavePath = filePath;
+    setDirty(false);
+  }
+  showToast(done);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1195,6 +1385,8 @@ const actions = {
   'piece-shadows': toggleActiveShadows,
   shortcuts: () => toggleShortcuts(),
   pieces: () => setPiecesOpen(panel.hidden),
+  'page-prev': () => showPage(state.pageIndex - 1),
+  'page-next': () => showPage(state.pageIndex + 1),
   theme: () => {
     Theme.toggle();
     syncTheme();
@@ -1274,6 +1466,8 @@ window.addEventListener('keydown', (e) => {
   else if (mod && key === '-') zoomBy(0.8);
   else if (mod && key === '0') fitToView();
   else if (mod && key === '1') zoomTo(1);
+  else if (key === 'pageup' && state.pdf) showPage(state.pageIndex - 1);
+  else if (key === 'pagedown' && state.pdf) showPage(state.pageIndex + 1);
   else if (key === 'delete' || key === 'backspace') removeActivePiece();
   else if (key === 'escape' && !shortcutsEl.hidden) toggleShortcuts(false);
   else if (key === 'escape' && !panel.hidden && !state.selection && !activePiece()) setPiecesOpen(false);
@@ -1320,10 +1514,10 @@ window.addEventListener('drop', (e) => {
   document.body.classList.remove('dropping');
   if (Signatures.isOpen()) return;
   const file = [...(e.dataTransfer?.files || [])].find(
-    (f) => f.type.startsWith('image/') || /\.(png|jpe?g|jfif|webp|gif|bmp|avif)$/i.test(f.name),
+    (f) => f.type.startsWith('image/') || f.type === 'application/pdf' || /\.(png|jpe?g|jfif|webp|gif|bmp|avif|pdf)$/i.test(f.name),
   );
   if (!file) {
-    showToast('That doesn’t look like a picture.', 'error');
+    showToast('That doesn’t look like a picture or a PDF.', 'error');
     return;
   }
   loadImage(file, file.name, window.api.pathForFile(file));
