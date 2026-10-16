@@ -31,6 +31,12 @@ Windows SmartScreen may warn you the first time you run it, because the app isn'
 
 Supported formats: PNG, JPG/JPEG, JFIF, WebP, GIF, BMP and AVIF for opening; PNG, JPG and WebP for saving.
 
+### Erase
+
+Drag a box around something, then press `Delete` or click **Erase**. Photo Patch finds what stands out from the background in the box (a letter, a word, a stain, a sticker) and removes only that. It fills the gap to match what's around it: the paper's color, its shading and its grain. Lines and patterns that run through the box, like ruled lines or bricks, carry on through the gap. Anything in the box that is already background stays as it was.
+
+Leave a little background around the thing you erase, so Photo Patch can see what to fill it with. To undo an erase, press `Ctrl+Z` or remove it from the **Pieces** list.
+
 ### Signatures
 
 Click **Sign** to draw, type or upload a signature:
@@ -52,7 +58,7 @@ Keep **Save for later** ticked, and the signature is kept for next time. Once yo
 | `Ctrl+V` | Paste at the pointer |
 | Drag a corner | Resize a piece |
 | Arrow keys | Nudge a piece |
-| `Delete` | Remove the piece |
+| `Delete` | Erase what's in the box, or remove the selected piece |
 | `H` | Peek at the original picture |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
 | `Ctrl+S` | Save |
