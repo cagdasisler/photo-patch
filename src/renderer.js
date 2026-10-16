@@ -34,6 +34,7 @@ const lightOptions = document.getElementById('light-options');
 const lightStrength = document.getElementById('light-strength');
 const lightStrengthValue = document.getElementById('light-strength-value');
 const pieceShadowsButton = pieceBar.querySelector('[data-action="piece-shadows"]');
+const pieceDuplicateButton = pieceBar.querySelector('[data-action="duplicate"]');
 const shortcutsEl = document.getElementById('shortcuts');
 const shortcutsBtn = document.getElementById('shortcuts-btn');
 const themeBtn = document.getElementById('theme-btn');
@@ -260,7 +261,7 @@ function setMatchLight(on) {
     // Not remembered, but it still applies for this session.
   }
   const active = activePiece();
-  if (active && active.kind !== 'signature' && Boolean(active.light) !== on && !state.showOriginal) {
+  if (active && active.kind === 'patch' && Boolean(active.light) !== on && !state.showOriginal) {
     setPieceLight(active, on);
     return;
   }
@@ -278,7 +279,7 @@ function setPieceLight(piece, on) {
 
 function toggleActiveLight() {
   const active = activePiece();
-  if (!active || state.showOriginal) {
+  if (!active || state.showOriginal || active.kind === 'erase') {
     setMatchLight(!state.matchLight);
     return;
   }
@@ -533,6 +534,7 @@ function refreshUI() {
   setEnabled('original', hasImage && state.pieces.length > 0);
   setEnabled('copy', hasImage && Boolean(sel || active));
   setEnabled('paste', hasImage && Boolean(state.clipboard));
+  setEnabled('erase', hasImage && Boolean(sel));
   setEnabled('pieces', hasImage);
   if (!hasImage) setPiecesOpen(false);
 
@@ -545,6 +547,8 @@ function refreshUI() {
   toolbarButtons.original.setAttribute('aria-pressed', String(state.showOriginal));
   toolbarButtons['match-light'].setAttribute('aria-pressed', String(state.matchLight));
   pieceLightButton.setAttribute('aria-pressed', String(Boolean(active?.light)));
+  // An erased spot is background, not a piece to light or copy again.
+  pieceLightButton.hidden = pieceDuplicateButton.hidden = active?.kind === 'erase';
   lightOptions.hidden = !active?.light;
   if (active?.light) {
     const percent = Math.round((active.strength ?? 1) * 100);
@@ -601,7 +605,7 @@ function updateHint() {
   else if (drag?.kind === 'move') text = 'Release to drop the piece here.';
   else if (drag?.kind === 'resize') text = 'Release to keep this size.';
   else if (activePiece()) text = 'Drag to move it, or drag the corner square to resize. Arrow keys nudge it. Delete removes it.';
-  else if (sel) text = 'Box selected. Click Copy on the left, or press Ctrl+C.';
+  else if (sel) text = 'Box selected. Press Ctrl+C to copy it, or Delete to erase what’s in it.';
   else if (state.clipboard) text = 'Point where you want the copy and press Ctrl+V, or click Paste on the left.';
   else text = 'Drag on the picture to select the part you want to copy.';
   hintEl.textContent = text;
@@ -638,7 +642,7 @@ function renderPieceList() {
   piecesEmpty.hidden = state.pieces.length > 0;
   const items = state.pieces.map((p, index) => {
     const li = document.createElement('li');
-    li.className = `piece${p.kind === 'signature' ? ' signature' : ''}${p.id === state.activeId ? ' active' : ''}`;
+    li.className = `piece${p.kind === 'patch' ? '' : ` ${p.kind}`}${p.id === state.activeId ? ' active' : ''}`;
     li.dataset.id = String(p.id);
 
     const thumb = document.createElement('canvas');
@@ -651,7 +655,7 @@ function renderPieceList() {
     const info = document.createElement('div');
     info.className = 'piece-info';
     const title = document.createElement('strong');
-    title.textContent = p.kind === 'signature' ? 'Signature' : `Piece ${p.id}`;
+    title.textContent = p.kind === 'signature' ? 'Signature' : p.kind === 'erase' ? 'Erased' : `Piece ${p.id}`;
     const meta = document.createElement('span');
     meta.textContent = `${p.w} × ${p.h} px · at ${p.x}, ${p.y}${p.light ? ' · light matched' : ''}`;
     info.append(title, meta);
@@ -757,7 +761,7 @@ function copySelection() {
 
   if (!sel && active) {
     const { kind, src, context, x, y, w, h } = active;
-    state.clipboard = { kind, src, context, x, y, w, h, pastes: 0 };
+    state.clipboard = { kind: kind === 'erase' ? 'patch' : kind, src, context, x, y, w, h, pastes: 0 };
     showToast('Copied this piece. Press Ctrl+V to paste another one.');
     refreshUI();
     return;
@@ -850,6 +854,40 @@ function placeSignature(src) {
 
   addPiece({ kind: 'signature', src, x, y, w, h });
   showToast('Signature added. Drag it into place, and drag the corner square to resize.');
+}
+
+// Erases what stands out from the background inside the box, filling it to match
+// what's around it (see eraser.js). The result is a piece like any other, so Undo,
+// the pieces list and H (peek at the original) all work on it.
+function eraseSelection() {
+  const sel = state.selection;
+  if (!state.image || !sel) return;
+  const { width: iw, height: ih } = state.image;
+  const m = clamp(Math.round(Math.max(sel.w, sel.h) * 0.75), 32, 128); // room for patterns to repeat
+  const x0 = Math.max(0, sel.x - m);
+  const y0 = Math.max(0, sel.y - m);
+  const area = blankCanvas(Math.min(iw, sel.x + sel.w + m) - x0, Math.min(ih, sel.y + sel.h + m) - y0);
+  drawComposite(area.getContext('2d'), x0, y0, true);
+  const box = { x: sel.x - x0, y: sel.y - y0, w: sel.w, h: sel.h };
+  const result = Eraser.erase(readPixels(area), box, { seed: nextPieceId });
+  if (!result) {
+    showToast('Leave some background around the box, so Erase can tell what to fill it with.');
+    return;
+  }
+  if (!result.image) {
+    showToast('Nothing in this box stands out from the background.');
+    return;
+  }
+  const src = blankCanvas(sel.w, sel.h);
+  src.getContext('2d').putImageData(new ImageData(result.image.data, sel.w, sel.h), 0, 0);
+  addPiece({ kind: 'erase', src, x: sel.x, y: sel.y, w: sel.w, h: sel.h });
+  state.activeId = null;
+  refreshUI();
+  showToast(
+    result.whole
+      ? 'Erased. There’s no plain background here, so the whole box was filled from around it. Ctrl+Z undoes it.'
+      : 'Erased. Ctrl+Z brings it back.',
+  );
 }
 
 function removePiece(id) {
@@ -1208,6 +1246,7 @@ function pieceAt(x, y) {
   if (state.showOriginal) return null;
   for (let i = state.pieces.length - 1; i >= 0; i--) {
     const p = state.pieces[i];
+    if (p.kind === 'erase') continue; // part of the background now; select it from the pieces list
     if (x >= p.x && x < p.x + p.w && y >= p.y && y < p.y + p.h) return p;
   }
   return null;
@@ -1371,6 +1410,7 @@ const actions = {
   save: saveImage,
   copy: copySelection,
   paste: () => pastePiece(false),
+  erase: eraseSelection,
   remove: removeActivePiece,
   duplicate: duplicateActive,
   sign: () => {
@@ -1468,6 +1508,7 @@ window.addEventListener('keydown', (e) => {
   else if (mod && key === '1') zoomTo(1);
   else if (key === 'pageup' && state.pdf) showPage(state.pageIndex - 1);
   else if (key === 'pagedown' && state.pdf) showPage(state.pageIndex + 1);
+  else if ((key === 'delete' || key === 'backspace') && state.selection) eraseSelection();
   else if (key === 'delete' || key === 'backspace') removeActivePiece();
   else if (key === 'escape' && !shortcutsEl.hidden) toggleShortcuts(false);
   else if (key === 'escape' && !panel.hidden && !state.selection && !activePiece()) setPiecesOpen(false);
