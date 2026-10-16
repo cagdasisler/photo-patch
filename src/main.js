@@ -8,6 +8,7 @@ const OPEN_EXTENSIONS = ['png', 'jpg', 'jpeg', 'jfif', 'webp', 'gif', 'bmp', 'av
 const SAVE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'];
 const MAX_SIGNATURES = 50;
 const MAX_SIGNATURE_CHARS = 8 * 1024 * 1024;
+const TITLE_BAR_HEIGHT = 36; // Matches .titlebar in styles.css
 
 let mainWindow = null;
 let hasUnsavedChanges = false;
@@ -54,7 +55,11 @@ function createWindow() {
     minWidth: 760,
     minHeight: 520,
     title: 'Photo Patch',
-    backgroundColor: '#16171a',
+    backgroundColor: '#eef0f4',
+    // No system title bar: the editor runs to the top edge and Windows draws only
+    // its min/max/close buttons, tinted by the page to match the theme.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#eef0f4', symbolColor: '#5d6270', height: TITLE_BAR_HEIGHT },
     show: false,
     icon: app.isPackaged ? undefined : path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: {
@@ -155,6 +160,14 @@ ipcMain.handle('save-signatures', async (_event, list) => {
 
 ipcMain.on('set-dirty', (_event, value) => {
   hasUnsavedChanges = Boolean(value);
+});
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+ipcMain.on('set-title-bar-colors', (_event, color, symbolColor) => {
+  if (!mainWindow || !HEX_COLOR.test(color) || !HEX_COLOR.test(symbolColor)) return;
+  mainWindow.setTitleBarOverlay({ color, symbolColor, height: TITLE_BAR_HEIGHT });
+  mainWindow.setBackgroundColor(color);
 });
 
 app.whenReady().then(() => {

@@ -4,81 +4,104 @@
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'">
   <title>Photo Patch</title>
+  <script src="theme.js"></script>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="signatures.css">
 </head>
 <body>
+  <nav id="rail" class="rail" aria-label="Tools">
+    <div class="rail-logo" title="Photo Patch">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" stroke-dasharray="3 2.4" />
+        <rect x="9.5" y="9.5" width="12" height="12" rx="2.5" class="solid" />
+      </svg>
+    </div>
+
+    <button data-action="open" class="rail-btn" title="Open a picture (Ctrl+O)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" /></svg>
+      <span>Open</span>
+    </button>
+    <button data-action="copy" class="rail-btn" title="Copy the box you drew (Ctrl+C)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
+      <span>Copy</span>
+    </button>
+    <button data-action="paste" class="rail-btn" title="Paste the copied piece (Ctrl+V pastes where you point)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /></svg>
+      <span>Paste</span>
+    </button>
+    <button data-action="sign" class="rail-btn" title="Add a signature: draw, type or upload one, and save it for later">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 17-2.156-1.868A.5.5 0 0 0 18 15.5v.5a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1c0-2.545-3.991-3.97-8.5-4a1 1 0 0 0 0 5c4.153 0 4.745-11.295 5.708-13.5a2.5 2.5 0 1 1 3.31 3.284" /><path d="M3 21h18" /></svg>
+      <span>Sign</span>
+    </button>
+    <button data-action="match-light" class="rail-btn" aria-pressed="false" title="Match light: pasted pieces take on the light and color of the spot you put them, like sunlight or shade (L)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="9.5" width="12" height="12" rx="2" /><path d="M2.5 15.5 8.5 9.5" /><path d="M2.5 20.5 13.5 9.5" /><circle cx="18.5" cy="5.5" r="2.5" /><path d="M18.5 1v.5" /><path d="M23 5.5h-.5" /><path d="m21.7 2.3-.4.4" /><path d="m21.7 8.7-.4-.4" /><path d="m15.3 2.3.4.4" /></svg>
+      <span>Match light</span>
+    </button>
+    <button id="pieces-btn" data-action="pieces" class="rail-btn" aria-expanded="false" aria-controls="panel" title="Show the pieces you pasted">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1.5" /><rect width="7" height="7" x="14" y="3" rx="1.5" /><rect width="7" height="7" x="14" y="14" rx="1.5" /><rect width="7" height="7" x="3" y="14" rx="1.5" /></svg>
+      <span>Pieces</span>
+      <span id="piece-count" class="rail-badge" hidden>0</span>
+    </button>
+
+    <div class="rail-spacer"></div>
+
+    <div class="rail-pair">
+      <button data-action="undo" class="rail-mini" title="Undo (Ctrl+Z)" aria-label="Undo">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
+      </button>
+      <button data-action="redo" class="rail-mini" title="Redo (Ctrl+Y)" aria-label="Redo">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></svg>
+      </button>
+    </div>
+    <button data-action="save" class="rail-btn primary" title="Save the edited picture (Ctrl+S)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m7 10 5 5 5-5" /><path d="M12 15V3" /></svg>
+      <span>Save</span>
+    </button>
+    <div class="rail-pair">
+      <button id="theme-btn" data-action="theme" class="rail-mini" title="Switch to dark mode" aria-label="Switch to dark mode">
+        <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" /></svg>
+        <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2" /><path d="M12 20v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" /><path d="M2 12h2" /><path d="M20 12h2" /><path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" /></svg>
+      </button>
+      <button id="shortcuts-btn" data-action="shortcuts" class="rail-mini" aria-expanded="false" aria-controls="shortcuts" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">
+        <span class="qmark" aria-hidden="true">?</span>
+      </button>
+    </div>
+  </nav>
+
   <main id="stage" class="stage">
     <canvas id="scene"></canvas>
     <canvas id="overlay"></canvas>
 
-    <div class="topbar">
-      <div class="brand">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" stroke-dasharray="3 2.4" />
-          <rect x="9.5" y="9.5" width="12" height="12" rx="2.5" class="solid" />
-        </svg>
-        <span class="brand-name">Photo Patch</span>
-        <span id="file-chip" class="chip" hidden></span>
-      </div>
-
-      <nav class="toolbar floating" aria-label="Main tools">
-        <button data-action="open" title="Open a picture (Ctrl+O)">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" /></svg>
-          <span class="label">Open</span>
-        </button>
-        <button data-action="undo" class="icon" title="Undo (Ctrl+Z)" aria-label="Undo">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
-        </button>
-        <button data-action="redo" class="icon" title="Redo (Ctrl+Y)" aria-label="Redo">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></svg>
-        </button>
-        <span class="divider" aria-hidden="true"></span>
-        <button data-action="paste" title="Paste the copied piece (Ctrl+V)" hidden>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /></svg>
-          <span class="label">Paste</span>
-        </button>
-        <button data-action="sign" title="Add a signature: draw, type or upload one, and save it for later">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 17-2.156-1.868A.5.5 0 0 0 18 15.5v.5a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1c0-2.545-3.991-3.97-8.5-4a1 1 0 0 0 0 5c4.153 0 4.745-11.295 5.708-13.5a2.5 2.5 0 1 1 3.31 3.284" /><path d="M3 21h18" /></svg>
-          <span class="label">Sign</span>
-        </button>
-        <button data-action="original" aria-pressed="false" title="Peek at the picture without your pasted pieces (H)">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
-          <span class="label">Peek original</span>
-        </button>
-        <button data-action="save" class="primary" title="Save the edited picture (Ctrl+S)">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m7 10 5 5 5-5" /><path d="M12 15V3" /></svg>
-          <span class="label">Save</span>
-        </button>
-      </nav>
-    </div>
-
-    <div class="zoom floating">
-        <button data-action="zoom-out" class="icon small" title="Zoom out (Ctrl+−)" aria-label="Zoom out">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>
-        </button>
-        <span id="zoom-label" class="zoom-label">—</span>
-        <button data-action="zoom-in" class="icon small" title="Zoom in (Ctrl++)" aria-label="Zoom in">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
-        </button>
-        <button data-action="fit" class="icon small" title="Fit picture to window (Ctrl+0)" aria-label="Fit to window">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M21 8V5a2 2 0 0 0-2-2h-3" /><path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
-        </button>
-    </div>
-
-    <div id="selection-bar" class="popover" hidden>
-      <button data-action="copy" class="primary" title="Copy this area (Ctrl+C)">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
-        Copy
-      </button>
-      <span id="selection-size" class="popover-meta"></span>
-    </div>
+    <header class="titlebar">
+      <span id="title-name" class="title-name"></span>
+      <span id="title-dirty" class="title-dirty" hidden></span>
+    </header>
+    <p id="hint" class="hint"></p>
+    <p class="caption">
+      <span id="image-size"></span>
+      <span id="zoom-label"></span>
+      <span id="cursor-pos" hidden></span>
+    </p>
 
     <div id="piece-bar" class="popover" hidden>
       <button data-action="duplicate" title="Paste another copy of this piece">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
         Duplicate
       </button>
+      <button data-action="piece-light" aria-pressed="false" title="Match this piece to the light where it sits (L)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="9.5" width="12" height="12" rx="2" /><path d="M2.5 15.5 8.5 9.5" /><path d="M2.5 20.5 13.5 9.5" /><circle cx="18.5" cy="5.5" r="2.5" /><path d="M18.5 1v.5" /><path d="M23 5.5h-.5" /><path d="m21.7 2.3-.4.4" /><path d="m21.7 8.7-.4-.4" /><path d="m15.3 2.3.4.4" /></svg>
+        Light
+      </button>
+      <span id="light-options" class="light-options" hidden>
+        <label class="strength" title="How strongly this piece takes on the light here. Lower it if the piece gets tinted toward its surroundings.">
+          <input id="light-strength" type="range" min="0" max="100" step="5" value="100" aria-label="Light strength">
+          <span id="light-strength-value">100%</span>
+        </label>
+        <button data-action="piece-shadows" aria-pressed="false" title="Also take on the sun spots and shadows under this piece, like dappled leaf shade. Best for covering marks on the same surface: something big and dark under the piece would show through as a shadow.">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2.5" class="filled" /><circle cx="16" cy="14" r="3" class="filled" /><circle cx="8.5" cy="16.5" r="1.5" class="filled" /></svg>
+          Shadows
+        </button>
+      </span>
       <button data-action="remove" class="danger" title="Remove this piece; the original shows again (Delete)">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2" /></svg>
         Remove
@@ -102,48 +125,52 @@
         </button>
         <ol class="steps">
           <li><b>Select</b><span>Drag a box around the part you want.</span></li>
-          <li><b>Copy</b><span>Click <em>Copy</em> under the box, or press <kbd>Ctrl</kbd> + <kbd>C</kbd></span></li>
+          <li><b>Copy</b><span>Click <em>Copy</em> on the left, or press <kbd>Ctrl</kbd> + <kbd>C</kbd></span></li>
           <li><b>Paste</b><span>Point where you want it and press <kbd>Ctrl</kbd> + <kbd>V</kbd>, then drag to fine&#8209;tune.</span></li>
           <li><b>Save</b><span>Click <em>Save</em> or press <kbd>Ctrl</kbd> + <kbd>S</kbd></span></li>
         </ol>
       </div>
     </div>
 
-    <div class="hint-pill floating"><span class="dot" aria-hidden="true"></span><span id="hint"></span></div>
-    <div class="info-chip"><span id="image-size"></span><span id="cursor-pos"></span></div>
-
-    <aside id="panel" class="panel floating" aria-label="Pasted pieces">
-      <div class="panel-head">
+    <aside id="panel" class="flyout pieces-flyout" aria-label="Pasted pieces" hidden>
+      <div class="flyout-head">
         <h2>Pieces</h2>
-        <span id="piece-count" class="badge">0</span>
+        <button class="icon-btn close-btn" data-action="pieces" title="Close" aria-label="Close the pieces list">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+        </button>
       </div>
+      <p id="pieces-empty" class="muted pieces-empty">Nothing pasted yet.</p>
       <ul id="piece-list" class="piece-list"></ul>
-      <p class="note">
-        Pieces sit on top of your photo. They hide what’s underneath without erasing it, so you can remove one any time.
-      </p>
-      <div class="panel-spacer"></div>
-      <div id="shortcuts" class="shortcuts" hidden>
-        <dl>
-          <dt>Drag</dt><dd>Select an area</dd>
-          <dt><kbd>Shift</kbd> + drag</dt><dd>Perfect square</dd>
-          <dt><kbd>Ctrl</kbd> + drag</dt><dd>Select over a piece</dd>
-          <dt><kbd>Ctrl</kbd> <kbd>C</kbd></dt><dd>Copy</dd>
-          <dt><kbd>Ctrl</kbd> <kbd>V</kbd></dt><dd>Paste at the pointer</dd>
-          <dt>Drag corner</dt><dd>Resize a piece</dd>
-          <dt>Arrow keys</dt><dd>Nudge a piece</dd>
-          <dt><kbd>Delete</kbd></dt><dd>Remove piece</dd>
-          <dt><kbd>H</kbd></dt><dd>Peek at the original</dd>
-          <dt><kbd>Ctrl</kbd> <kbd>Z</kbd></dt><dd>Undo</dd>
-          <dt><kbd>Ctrl</kbd> <kbd>S</kbd></dt><dd>Save</dd>
-          <dt>Scroll</dt><dd>Zoom</dd>
-          <dt><kbd>Space</kbd> + drag</dt><dd>Pan around</dd>
-        </dl>
-      </div>
-      <button id="shortcuts-btn" class="panel-btn" data-action="shortcuts" aria-expanded="false" aria-controls="shortcuts">
-        <span class="qmark" aria-hidden="true">?</span>
-        Keyboard shortcuts
+      <button data-action="original" class="flyout-toggle" aria-pressed="false" title="Peek at the picture without your pasted pieces (H)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
+        Peek at the original
+        <kbd>H</kbd>
       </button>
+      <p class="note">Pieces sit on top of your photo. They hide what’s underneath without erasing it, so you can remove one any time.</p>
     </aside>
+
+    <div id="shortcuts" class="flyout shortcuts-flyout" hidden>
+      <div class="flyout-head">
+        <h2>Keyboard shortcuts</h2>
+      </div>
+      <dl>
+        <dt>Drag</dt><dd>Select an area</dd>
+        <dt><kbd>Shift</kbd> + drag</dt><dd>Perfect square</dd>
+        <dt><kbd>Ctrl</kbd> + drag</dt><dd>Select over a piece</dd>
+        <dt><kbd>Ctrl</kbd> <kbd>C</kbd></dt><dd>Copy</dd>
+        <dt><kbd>Ctrl</kbd> <kbd>V</kbd></dt><dd>Paste at the pointer</dd>
+        <dt>Drag corner</dt><dd>Resize a piece</dd>
+        <dt>Arrow keys</dt><dd>Nudge a piece</dd>
+        <dt><kbd>Delete</kbd></dt><dd>Remove piece</dd>
+        <dt><kbd>H</kbd></dt><dd>Peek at the original</dd>
+        <dt><kbd>L</kbd></dt><dd>Match light</dd>
+        <dt><kbd>Ctrl</kbd> <kbd>Z</kbd></dt><dd>Undo</dd>
+        <dt><kbd>Ctrl</kbd> <kbd>S</kbd></dt><dd>Save</dd>
+        <dt>Scroll</dt><dd>Zoom</dd>
+        <dt><kbd>Ctrl</kbd> <kbd>0</kbd></dt><dd>Fit to window</dd>
+        <dt><kbd>Space</kbd> + drag</dt><dd>Pan around</dd>
+      </dl>
+    </div>
 
     <div class="drop-hint">Drop the picture to open it</div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -225,6 +252,7 @@
   </dialog>
 
   <script src="signatures.js"></script>
+  <script src="lightmatch.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

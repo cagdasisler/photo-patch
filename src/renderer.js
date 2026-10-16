@@ -17,21 +17,29 @@ const sceneCtx = scene.getContext('2d');
 const overlayCtx = overlay.getContext('2d');
 const emptyState = document.getElementById('empty');
 const panel = document.getElementById('panel');
+const piecesBtn = document.getElementById('pieces-btn');
 const pieceList = document.getElementById('piece-list');
+const piecesEmpty = document.getElementById('pieces-empty');
 const pieceCount = document.getElementById('piece-count');
 const hintEl = document.getElementById('hint');
 const cursorEl = document.getElementById('cursor-pos');
 const sizeEl = document.getElementById('image-size');
-const fileChip = document.getElementById('file-chip');
+const titleName = document.getElementById('title-name');
+const titleDirty = document.getElementById('title-dirty');
 const zoomLabel = document.getElementById('zoom-label');
 const toastEl = document.getElementById('toast');
-const selectionBar = document.getElementById('selection-bar');
-const selectionSize = document.getElementById('selection-size');
 const pieceBar = document.getElementById('piece-bar');
+const pieceLightButton = pieceBar.querySelector('[data-action="piece-light"]');
+const lightOptions = document.getElementById('light-options');
+const lightStrength = document.getElementById('light-strength');
+const lightStrengthValue = document.getElementById('light-strength-value');
+const pieceShadowsButton = pieceBar.querySelector('[data-action="piece-shadows"]');
 const shortcutsEl = document.getElementById('shortcuts');
 const shortcutsBtn = document.getElementById('shortcuts-btn');
+const themeBtn = document.getElementById('theme-btn');
+// The rail holds every tool; "Peek at the original" lives in the pieces fly-out.
 const toolbarButtons = Object.fromEntries(
-  [...document.querySelectorAll('.toolbar [data-action], .zoom [data-action]')].map((b) => [b.dataset.action, b]),
+  [...document.querySelectorAll('.rail [data-action], #panel [data-action="original"]')].map((b) => [b.dataset.action, b]),
 );
 
 const ICON_X = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
@@ -41,12 +49,15 @@ const state = {
   name: '',
   path: '',
   lastSavePath: '',
-  pieces: [], // { id, kind, src: canvas, x, y, w, h } drawn in order on top of the image, src stretched to w × h
+  // { id, kind, src: canvas, x, y, w, h, light, context } drawn in order on top of the image, src stretched to
+  // w × h; light: re-lit to match where it sits; context: src plus its surroundings where it was copied
+  pieces: [],
   activeId: null,
   hoverId: null,
   selection: null, // { x, y, w, h } in picture pixels
-  clipboard: null, // { kind, src, x, y, w, h, pastes }
+  clipboard: null, // { kind, src, context, x, y, w, h, pastes, light? }
   showOriginal: false,
+  matchLight: false, // new pastes match the light where they're put
   dirty: false,
 };
 
@@ -60,17 +71,23 @@ let lastNudgeAt = 0;
 let antsOffset = 0;
 let toastTimer = 0;
 
-const checkerPattern = (() => {
+function makeChecker(base, square) {
   const tile = document.createElement('canvas');
   tile.width = tile.height = 16;
   const g = tile.getContext('2d');
-  g.fillStyle = '#3a3d42';
+  g.fillStyle = base;
   g.fillRect(0, 0, 16, 16);
-  g.fillStyle = '#2c2e33';
+  g.fillStyle = square;
   g.fillRect(0, 0, 8, 8);
   g.fillRect(8, 8, 8, 8);
   return sceneCtx.createPattern(tile, 'repeat');
-})();
+}
+
+// What shows behind see-through pixels, and the picture's drop shadow, per theme.
+const backdrop = {
+  light: { checker: makeChecker('#ffffff', '#e3e5ea'), shadow: 'rgba(20, 24, 40, 0.22)' },
+  dark: { checker: makeChecker('#3a3d42', '#2c2e33'), shadow: 'rgba(0, 0, 0, 0.55)' },
+};
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const activePiece = () => state.pieces.find((p) => p.id === state.activeId) || null;
@@ -90,18 +107,218 @@ function syncCanvasSize(canvas) {
   return dpr;
 }
 
-// Draws the picture as it will be saved: the original, then every piece on top.
-function drawComposite(g, offsetX, offsetY, withPieces) {
+// Draws the picture as it will be saved: the original, then every piece on top
+// (or only the first `count` pieces, to see what lies under a piece).
+function drawComposite(g, offsetX, offsetY, withPieces, count = state.pieces.length) {
   g.drawImage(state.image, -offsetX, -offsetY);
   if (!withPieces) return;
   const smoothing = g.imageSmoothingEnabled;
-  for (const p of state.pieces) {
+  for (let i = 0; i < count; i++) {
+    const p = state.pieces[i];
+    const img = pieceImage(p, i);
     // A resized piece looks jagged without smoothing, even when zoomed in.
-    g.imageSmoothingEnabled = smoothing || p.w !== p.src.width || p.h !== p.src.height;
-    g.drawImage(p.src, p.x - offsetX, p.y - offsetY, p.w, p.h);
+    g.imageSmoothingEnabled = smoothing || p.w !== img.width || p.h !== img.height;
+    g.drawImage(img, p.x - offsetX, p.y - offsetY, p.w, p.h);
   }
   g.imageSmoothingEnabled = smoothing;
 }
+
+/* ------------------------------------------------------------------------ */
+/* Match light                                                              */
+/* ------------------------------------------------------------------------ */
+
+// A piece with `light` on is drawn re-lit to match the spot it sits on (see
+// lightmatch.js). That depends on what's underneath, so the re-lit version is
+// kept per piece and redone when the piece, or a piece under it, changes.
+const lightCache = new Map(); // piece id → { key, canvas, fast, cost, at, stamp, gain, warmth, ink }
+const canvasIds = new WeakMap();
+let nextCanvasId = 1;
+let lightStamp = 0;
+let lightRefreshTimer = 0;
+let adjustingStrength = false; // the strength slider is being dragged
+
+function canvasId(c) {
+  if (!canvasIds.has(c)) canvasIds.set(c, nextCanvasId++);
+  return canvasIds.get(c);
+}
+
+// Everything a piece's re-lit look depends on: the piece itself, and the pieces
+// under it that reach into its surroundings (with how they look right now).
+function lightKey(p, index) {
+  const m = LightMatch.MARGIN;
+  const parts = [p.x, p.y, p.w, p.h, canvasId(p.src), p.strength ?? 1, p.shadows ? 1 : 0];
+  for (let i = 0; i < index; i++) {
+    const q = state.pieces[i];
+    if (q.x >= p.x + p.w + m || q.y >= p.y + p.h + m || q.x + q.w <= p.x - m || q.y + q.h <= p.y - m) continue;
+    parts.push(q.id, q.x, q.y, q.w, q.h, canvasId(q.src), q.light ? lightCache.get(q.id)?.stamp : 0);
+  }
+  return parts.join(',');
+}
+
+function readPixels(canvas) {
+  return canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+}
+
+function blankCanvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  c.getContext('2d', { willReadFrequently: true }).imageSmoothingQuality = 'high';
+  return c;
+}
+
+function relight(p, index, key, fast) {
+  const started = performance.now();
+  const m = LightMatch.MARGIN;
+  const { w, h } = p;
+
+  const patch = blankCanvas(w, h);
+  patch.getContext('2d').drawImage(p.src, 0, 0, w, h);
+  const under = blankCanvas(w + 2 * m, h + 2 * m);
+  drawComposite(under.getContext('2d'), p.x - m, p.y - m, true, index);
+  let source = null;
+  if (p.context) {
+    // Where it was copied from, stretched along with the piece if it was resized.
+    const kx = w / p.src.width;
+    const ky = h / p.src.height;
+    source = blankCanvas(w + 2 * m, h + 2 * m);
+    source.getContext('2d').drawImage(p.context, m - m * kx, m - m * ky, p.context.width * kx, p.context.height * ky);
+  }
+
+  const result = LightMatch.match(readPixels(patch), readPixels(under), source && readPixels(source), {
+    seed: p.id,
+    fast,
+    strength: p.strength ?? 1,
+    under: Boolean(p.shadows),
+  });
+  let canvas = null;
+  if (result) {
+    canvas = blankCanvas(w, h);
+    canvas.getContext('2d').putImageData(new ImageData(result.image.data, w, h), 0, 0);
+  }
+  const now = performance.now();
+  return {
+    key,
+    canvas,
+    fast,
+    cost: now - started,
+    at: now,
+    stamp: ++lightStamp,
+    gain: result ? result.gain : 1,
+    warmth: result ? result.warmth : 0,
+    ink: Boolean(result?.ink),
+  };
+}
+
+// What to draw for a piece: its own pixels, or its re-lit version.
+function pieceImage(p, index) {
+  if (!p.light) return p.src;
+  const key = lightKey(p, index);
+  const live = drag?.kind === 'move' || drag?.kind === 'resize' || adjustingStrength;
+  const cached = lightCache.get(p.id);
+  if (cached && cached.key === key && (live || !cached.fast)) return cached.canvas || p.src;
+  // While dragging, a piece that's slow to re-light keeps its last look for a
+  // moment, so the drag stays smooth; it catches up when the pointer rests.
+  if (cached && live && performance.now() - cached.at < cached.cost * 2) {
+    clearTimeout(lightRefreshTimer);
+    lightRefreshTimer = setTimeout(render, Math.max(40, cached.cost * 2));
+    return cached.canvas || p.src;
+  }
+  const entry = relight(p, index, key, live && p.w * p.h > 250000);
+  lightCache.set(p.id, entry);
+  return entry.canvas || p.src;
+}
+
+function describeLight(p) {
+  const e = lightCache.get(p.id);
+  if (p.strength === 0) return 'Strength is at 0%, so this piece keeps its own light.';
+  if (!e || !e.canvas) return 'There’s nothing around this piece to match its light to.';
+  if (e.ink) return 'The ink now takes on the light and color of what’s under it.';
+  const changes = [];
+  if (e.gain > 1.08) changes.push(`${e.gain < 1.95 ? Math.round((e.gain - 1) * 100) + '%' : e.gain.toFixed(1) + '×'} brighter`);
+  else if (e.gain < 0.92) changes.push(`${Math.round((1 - e.gain) * 100)}% darker`);
+  if (e.warmth > 0.06) changes.push('warmer');
+  else if (e.warmth < -0.06) changes.push('cooler');
+  return changes.length ? `Matched to the light here: ${changes.join(', ')}.` : 'Matched to the light here. It was already close.';
+}
+
+// The toolbar switch: whether new pastes match the light. Flipping it also
+// applies to the piece that's selected right now.
+function setMatchLight(on) {
+  state.matchLight = on;
+  try {
+    localStorage.setItem('match-light', on ? '1' : '0');
+  } catch {
+    // Not remembered, but it still applies for this session.
+  }
+  const active = activePiece();
+  if (active && active.kind !== 'signature' && Boolean(active.light) !== on && !state.showOriginal) {
+    setPieceLight(active, on);
+    return;
+  }
+  refreshUI();
+  showToast(on ? 'Match light is on. Pasted pieces take on the light of the spot you put them.' : 'Match light is off. Pasted pieces keep their own light.');
+}
+
+function setPieceLight(piece, on) {
+  pushUndo(snapshot());
+  piece.light = on;
+  setDirty(true);
+  refreshUI();
+  showToast(on ? describeLight(piece) : 'This piece keeps its own light again.');
+}
+
+function toggleActiveLight() {
+  const active = activePiece();
+  if (!active || state.showOriginal) {
+    setMatchLight(!state.matchLight);
+    return;
+  }
+  setPieceLight(active, !active.light);
+}
+
+function toggleActiveShadows() {
+  const active = activePiece();
+  if (!active?.light) return;
+  pushUndo(snapshot());
+  active.shadows = !active.shadows;
+  setDirty(true);
+  refreshUI();
+  showToast(
+    active.shadows
+      ? 'Now also taking on the sun spots and shadows under this piece. If something dark was under it, turn Shadows off.'
+      : 'Back to matching the light around this piece only.',
+  );
+}
+
+// The strength slider: one undo step per drag of it, a quick preview while it
+// moves, and the full-quality look when it's let go.
+lightStrength.addEventListener('input', () => {
+  const active = activePiece();
+  if (!active?.light) return;
+  if (!adjustingStrength) {
+    pushUndo(snapshot());
+    adjustingStrength = true;
+  }
+  active.strength = Number(lightStrength.value) / 100;
+  lightStrengthValue.textContent = `${lightStrength.value}%`;
+  setDirty(true);
+  render();
+});
+
+let strengthByPointer = false;
+lightStrength.addEventListener('pointerdown', () => {
+  strengthByPointer = true;
+});
+
+lightStrength.addEventListener('change', () => {
+  adjustingStrength = false;
+  if (strengthByPointer) lightStrength.blur(); // hand Space and the arrow keys back to the editor
+  strengthByPointer = false;
+  refreshUI();
+  const active = activePiece();
+  if (active?.light) showToast(describeLight(active));
+});
 
 function renderScene() {
   const dpr = syncCanvasSize(scene);
@@ -113,10 +330,11 @@ function renderScene() {
 
   const { scale, ox, oy } = view;
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const { checker, shadow } = backdrop[Theme.current()];
   g.save();
-  g.shadowColor = 'rgba(0, 0, 0, 0.55)';
+  g.shadowColor = shadow;
   g.shadowBlur = 28;
-  g.fillStyle = checkerPattern;
+  g.fillStyle = checker;
   g.fillRect(ox, oy, img.width * scale, img.height * scale);
   g.restore();
 
@@ -247,13 +465,11 @@ function render() {
   updatePopovers();
 }
 
-// The part of the stage not covered by the floating toolbars and pieces panel.
+// The part of the stage between the hint line at the top and the file name at the bottom.
 function viewport() {
   const w = stage.clientWidth;
   const h = stage.clientHeight;
-  const panelShown = state.image && panel.offsetParent !== null;
-  const right = panelShown ? panel.offsetLeft - 16 : w - 16;
-  return { left: 16, top: 70, right: Math.max(right, 120), bottom: Math.max(h - 66, 140) };
+  return { left: 20, top: 66, right: Math.max(w - 20, 120), bottom: Math.max(h - 38, 140) };
 }
 
 // Places a pop-over beside a box (picture pixels), flipping sides when there's no room.
@@ -274,14 +490,6 @@ function placePopover(el, r, prefer) {
 }
 
 function updatePopovers() {
-  const sel = state.selection;
-  if (state.image && sel && drag?.kind !== 'select') {
-    selectionSize.textContent = `${sel.w} × ${sel.h}`;
-    placePopover(selectionBar, sel, 'below');
-  } else {
-    selectionBar.hidden = true;
-  }
-
   const active = activePiece();
   const changing = drag?.kind === 'move' || drag?.kind === 'resize';
   if (state.image && active && !state.showOriginal && !changing) placePopover(pieceBar, active, 'above');
@@ -308,19 +516,39 @@ function refreshUI() {
   const active = activePiece();
   if (state.pieces.length === 0) state.showOriginal = false;
 
+  const sel = state.selection;
   setEnabled('save', hasImage);
   setEnabled('undo', history.undo.length > 0);
   setEnabled('redo', history.redo.length > 0);
   setEnabled('original', hasImage && state.pieces.length > 0);
-  for (const action of ['zoom-in', 'zoom-out', 'fit']) setEnabled(action, hasImage);
-  toolbarButtons.paste.hidden = !(hasImage && state.clipboard);
+  setEnabled('copy', hasImage && Boolean(sel || active));
+  setEnabled('paste', hasImage && Boolean(state.clipboard));
+  setEnabled('pieces', hasImage);
+  if (!hasImage) setPiecesOpen(false);
+
+  // Light up the button for the next step.
+  toolbarButtons.open.classList.toggle('next', !hasImage);
+  toolbarButtons.copy.classList.toggle('next', Boolean(sel) && drag?.kind !== 'select');
+  toolbarButtons.paste.classList.toggle('next', Boolean(state.clipboard && !sel && !active));
+
+  pieceCount.hidden = state.pieces.length === 0;
   toolbarButtons.original.setAttribute('aria-pressed', String(state.showOriginal));
+  toolbarButtons['match-light'].setAttribute('aria-pressed', String(state.matchLight));
+  pieceLightButton.setAttribute('aria-pressed', String(Boolean(active?.light)));
+  lightOptions.hidden = !active?.light;
+  if (active?.light) {
+    const percent = Math.round((active.strength ?? 1) * 100);
+    lightStrength.value = String(percent);
+    lightStrengthValue.textContent = `${percent}%`;
+    // Ink has no light pattern of its own to swap, so Shadows is for photo pieces.
+    pieceShadowsButton.hidden = active.kind === 'signature';
+    pieceShadowsButton.setAttribute('aria-pressed', String(Boolean(active.shadows)));
+  }
   if (!active) pieceBar.hidden = true;
+  for (const id of lightCache.keys()) if (!state.pieces.some((p) => p.id === id)) lightCache.delete(id);
 
   document.body.classList.toggle('has-image', hasImage);
   emptyState.hidden = hasImage;
-  fileChip.hidden = !hasImage;
-  fileChip.textContent = state.name;
   updateZoomLabel();
   renderPieceList();
   updateHint();
@@ -329,12 +557,21 @@ function refreshUI() {
 }
 
 function updateZoomLabel() {
-  zoomLabel.textContent = state.image ? `${Math.round(view.scale * 100)}%` : '—';
+  zoomLabel.textContent = state.image ? `${Math.round(view.scale * 100)}%` : '';
 }
 
 function updateTitle() {
   const name = state.image ? `${state.dirty ? '• ' : ''}${state.name} — ` : '';
   document.title = `${name}Photo Patch`;
+  titleName.textContent = state.image ? shortName(state.name) : '';
+  titleDirty.hidden = !(state.image && state.dirty);
+}
+
+// Long camera names get cut in the middle, so the start and the extension both stay readable.
+function shortName(name, max = 44) {
+  if (name.length <= max) return name;
+  const tail = Math.floor(max / 2);
+  return `${name.slice(0, max - tail - 1)}…${name.slice(-tail)}`;
 }
 
 function setDirty(value) {
@@ -353,8 +590,8 @@ function updateHint() {
   else if (drag?.kind === 'move') text = 'Release to drop the piece here.';
   else if (drag?.kind === 'resize') text = 'Release to keep this size.';
   else if (activePiece()) text = 'Drag to move it, or drag the corner square to resize. Arrow keys nudge it. Delete removes it.';
-  else if (sel) text = 'Click Copy under the box, or press Ctrl+C.';
-  else if (state.clipboard) text = 'Point where you want the copy and press Ctrl+V, or click Paste at the top.';
+  else if (sel) text = 'Box selected. Click Copy on the left, or press Ctrl+C.';
+  else if (state.clipboard) text = 'Point where you want the copy and press Ctrl+V, or click Paste on the left.';
   else text = 'Drag on the picture to select the part you want to copy.';
   hintEl.textContent = text;
 }
@@ -387,7 +624,8 @@ function showToast(message, kind = 'info') {
 
 function renderPieceList() {
   pieceCount.textContent = String(state.pieces.length);
-  const items = state.pieces.map((p) => {
+  piecesEmpty.hidden = state.pieces.length > 0;
+  const items = state.pieces.map((p, index) => {
     const li = document.createElement('li');
     li.className = `piece${p.kind === 'signature' ? ' signature' : ''}${p.id === state.activeId ? ' active' : ''}`;
     li.dataset.id = String(p.id);
@@ -397,14 +635,14 @@ function renderPieceList() {
     const tg = thumb.getContext('2d');
     const k = Math.min(88 / p.w, 88 / p.h);
     tg.imageSmoothingQuality = 'high';
-    tg.drawImage(p.src, (88 - p.w * k) / 2, (88 - p.h * k) / 2, p.w * k, p.h * k);
+    tg.drawImage(pieceImage(p, index), (88 - p.w * k) / 2, (88 - p.h * k) / 2, p.w * k, p.h * k);
 
     const info = document.createElement('div');
     info.className = 'piece-info';
     const title = document.createElement('strong');
     title.textContent = p.kind === 'signature' ? 'Signature' : `Piece ${p.id}`;
     const meta = document.createElement('span');
-    meta.textContent = `${p.w} × ${p.h} px · at ${p.x}, ${p.y}`;
+    meta.textContent = `${p.w} × ${p.h} px · at ${p.x}, ${p.y}${p.light ? ' · light matched' : ''}`;
     info.append(title, meta);
 
     const remove = document.createElement('button');
@@ -507,7 +745,8 @@ function copySelection() {
   const active = activePiece();
 
   if (!sel && active) {
-    state.clipboard = { kind: active.kind, src: active.src, x: active.x, y: active.y, w: active.w, h: active.h, pastes: 0 };
+    const { kind, src, context, x, y, w, h } = active;
+    state.clipboard = { kind, src, context, x, y, w, h, pastes: 0 };
     showToast('Copied this piece. Press Ctrl+V to paste another one.');
     refreshUI();
     return;
@@ -517,12 +756,18 @@ function copySelection() {
     return;
   }
 
-  // Copy exactly what is visible inside the box, including any pieces already pasted there.
+  // Copy exactly what is visible inside the box, including any pieces already pasted there,
+  // and a little of what's around it, which Match light uses to keep the grain in step.
+  const m = LightMatch.MARGIN;
+  const context = document.createElement('canvas');
+  context.width = sel.w + 2 * m;
+  context.height = sel.h + 2 * m;
+  drawComposite(context.getContext('2d'), sel.x - m, sel.y - m, !state.showOriginal);
   const src = document.createElement('canvas');
   src.width = sel.w;
   src.height = sel.h;
-  drawComposite(src.getContext('2d'), sel.x, sel.y, !state.showOriginal);
-  state.clipboard = { kind: 'patch', src, x: sel.x, y: sel.y, w: sel.w, h: sel.h, pastes: 0 };
+  src.getContext('2d').drawImage(context, -m, -m);
+  state.clipboard = { kind: 'patch', src, context, x: sel.x, y: sel.y, w: sel.w, h: sel.h, pastes: 0 };
   showToast(`Copied ${sel.w} × ${sel.h} px. Point where you want it and press Ctrl+V.`);
   refreshUI();
 }
@@ -551,8 +796,9 @@ function pastePiece(atPointer) {
   x = clamp(x, 0, Math.max(0, iw - clip.w));
   y = clamp(y, 0, Math.max(0, ih - clip.h));
 
-  addPiece({ kind: clip.kind, src: clip.src, x, y, w: clip.w, h: clip.h });
-  showToast('Pasted. Drag it to exactly where you want it.');
+  const light = clip.light ?? (clip.kind !== 'signature' && state.matchLight);
+  const piece = addPiece({ kind: clip.kind, src: clip.src, context: clip.context, x, y, w: clip.w, h: clip.h, light });
+  showToast(light ? `Pasted. ${describeLight(piece)}` : 'Pasted. Drag it to exactly where you want it.');
 }
 
 function addPiece(fields) {
@@ -630,13 +876,22 @@ function nudgeActive(dx, dy) {
 function duplicateActive() {
   const active = activePiece();
   if (!active) return;
-  state.clipboard = { kind: active.kind, src: active.src, x: active.x, y: active.y, w: active.w, h: active.h, pastes: 0 };
+  const { kind, src, context, x, y, w, h, light } = active;
+  state.clipboard = { kind, src, context, x, y, w, h, pastes: 0, light: Boolean(light) };
   pastePiece(false);
 }
 
+// The two fly-outs share the space next to the rail, so opening one closes the other.
 function toggleShortcuts(open = shortcutsEl.hidden) {
   shortcutsEl.hidden = !open;
   shortcutsBtn.setAttribute('aria-expanded', String(open));
+  if (open) setPiecesOpen(false);
+}
+
+function setPiecesOpen(open) {
+  panel.hidden = !open;
+  piecesBtn.setAttribute('aria-expanded', String(open));
+  if (open) toggleShortcuts(false);
 }
 
 function selectAll() {
@@ -876,12 +1131,15 @@ overlay.addEventListener('pointermove', (e) => {
 
 function endDrag() {
   if (!drag) return;
-  if ((drag.kind === 'move' || drag.kind === 'resize') && drag.moved) {
+  const changed = (drag.kind === 'move' || drag.kind === 'resize') && drag.moved ? drag.piece : null;
+  if (changed) {
     pushUndo(drag.before);
     setDirty(true);
   }
   drag = null;
+  clearTimeout(lightRefreshTimer);
   refreshUI();
+  if (changed?.light) showToast(describeLight(changed));
 }
 
 overlay.addEventListener('pointerup', endDrag);
@@ -932,11 +1190,26 @@ const actions = {
   undo,
   redo,
   original: toggleOriginal,
-  'zoom-in': () => zoomBy(1.25),
-  'zoom-out': () => zoomBy(0.8),
-  fit: fitToView,
+  'match-light': () => setMatchLight(!state.matchLight),
+  'piece-light': toggleActiveLight,
+  'piece-shadows': toggleActiveShadows,
   shortcuts: () => toggleShortcuts(),
+  pieces: () => setPiecesOpen(panel.hidden),
+  theme: () => {
+    Theme.toggle();
+    syncTheme();
+    render();
+  },
 };
+
+function syncTheme() {
+  const label = Theme.current() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+  themeBtn.title = label;
+  themeBtn.setAttribute('aria-label', label);
+  // Windows draws the min/max/close buttons, so hand it the canvas colors.
+  const css = getComputedStyle(document.documentElement);
+  window.api.setTitleBarColors(css.getPropertyValue('--bg').trim(), css.getPropertyValue('--muted').trim());
+}
 
 document.addEventListener('click', (e) => {
   const button = e.target.closest('[data-action]');
@@ -980,6 +1253,7 @@ const ARROWS = { arrowleft: [-1, 0], arrowright: [1, 0], arrowup: [0, -1], arrow
 window.addEventListener('keydown', (e) => {
   if (Signatures.isOpen()) return; // typing a name must not trigger editor shortcuts
   const mod = e.ctrlKey || e.metaKey;
+  if (e.target === lightStrength && !mod && e.key !== 'Escape') return; // arrows move the slider, not the piece
   const key = e.key.toLowerCase();
   let handled = true;
 
@@ -1002,9 +1276,11 @@ window.addEventListener('keydown', (e) => {
   else if (mod && key === '1') zoomTo(1);
   else if (key === 'delete' || key === 'backspace') removeActivePiece();
   else if (key === 'escape' && !shortcutsEl.hidden) toggleShortcuts(false);
+  else if (key === 'escape' && !panel.hidden && !state.selection && !activePiece()) setPiecesOpen(false);
   else if (key === 'escape') deselect();
   else if (key === '?') toggleShortcuts();
   else if (key === 'h' && !mod && !e.altKey) toggleOriginal();
+  else if (key === 'l' && !mod && !e.altKey && !drag) toggleActiveLight();
   else if (ARROWS[key] && activePiece()) {
     const step = e.shiftKey ? 10 : 1;
     nudgeActive(ARROWS[key][0] * step, ARROWS[key][1] * step);
@@ -1062,6 +1338,12 @@ Signatures.init({
   place: placeSignature,
   toast: showToast,
 });
+syncTheme();
+try {
+  state.matchLight = localStorage.getItem('match-light') === '1';
+} catch {
+  // Start with Match light off.
+}
 refreshUI();
 window.api.startupImage().then((file) => {
   if (file) loadImage(new Blob([file.data]), file.name, file.path);

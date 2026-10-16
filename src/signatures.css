@@ -14,11 +14,11 @@
   border-radius: 20px;
   background: var(--surface-solid);
   color: var(--text);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--shadow-lg);
 }
 
 .sign-dialog::backdrop {
-  background: rgba(8, 9, 11, 0.62);
+  background: var(--backdrop);
 }
 
 .sign-head {
@@ -78,6 +78,7 @@
 .paper {
   background: var(--paper);
   border-radius: 14px;
+  box-shadow: inset 0 0 0 1px var(--paper-edge);
 }
 
 /* Draw */
@@ -197,7 +198,7 @@
 }
 
 .btn:hover:not(:disabled) {
-  background: #2e323c;
+  background: var(--btn-hover);
 }
 
 .btn:disabled {
@@ -241,6 +242,7 @@
   border: 2px solid transparent;
   border-radius: 14px;
   background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--paper-edge);
   font-size: 28px;
   text-align: left;
   white-space: nowrap;
@@ -267,6 +269,7 @@
   padding: 16px;
   border-radius: 14px;
   background-color: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--paper-edge);
   background-image: conic-gradient(#e7e5de 25%, transparent 0 50%, #e7e5de 0 75%, transparent 0);
   background-size: 18px 18px;
 }
@@ -287,7 +290,7 @@
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  color: #c9cdd6;
+  color: var(--text-soft);
   font-size: 13px;
   cursor: pointer;
 }
@@ -324,8 +327,8 @@
 }
 
 .sign-foot button.primary:disabled {
-  background: #2a2e48;
-  color: #6f7591;
+  background: var(--primary-disabled-bg);
+  color: var(--primary-disabled-text);
   cursor: default;
 }
 
@@ -345,14 +348,15 @@
 }
 
 .sig-thumb {
-  display: grid;
-  place-items: center;
+  display: block;
+  overflow: hidden;
   width: 100%;
   height: 100px;
   padding: 12px;
   border: 2px solid transparent;
   border-radius: 12px;
   background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--paper-edge);
   cursor: pointer;
 }
 
@@ -383,10 +387,12 @@
   stroke-width: 2.4;
 }
 
+/* Fill the thumbnail's fixed inner box and let the image shrink to fit inside it.
+   (max-height alone doesn't work here: the box has no definite height for it to use.) */
 .sig-thumb img {
   display: block;
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 
