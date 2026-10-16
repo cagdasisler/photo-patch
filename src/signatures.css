@@ -1,0 +1,446 @@
+/* ---------- Signatures: dialog, pad, saved list ---------- */
+
+:root {
+  --paper: #f7f6f2;
+  --paper-line: #cdc9be;
+  --paper-text: #a39f94;
+}
+
+.sign-dialog {
+  width: min(660px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface-solid);
+  color: var(--text);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+.sign-dialog::backdrop {
+  background: rgba(8, 9, 11, 0.62);
+}
+
+.sign-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 18px 8px 24px;
+}
+
+.sign-head h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.sign-head .close-btn:hover {
+  background: var(--surface-raised);
+  color: var(--text);
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs button {
+  padding: 10px 14px;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tabs button:hover {
+  color: var(--text);
+}
+
+.tabs button[aria-selected="true"] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.sign-body {
+  padding: 18px 24px;
+  min-height: 300px;
+}
+
+.sign-body p {
+  margin: 0 0 12px;
+}
+
+.paper {
+  background: var(--paper);
+  border-radius: 14px;
+}
+
+/* Draw */
+
+.pad-wrap {
+  position: relative;
+  overflow: hidden;
+}
+
+#sig-pad {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1200 / 420;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.pad-line {
+  position: absolute;
+  left: 7%;
+  right: 7%;
+  bottom: 26%;
+  border-bottom: 1.5px solid var(--paper-line);
+  pointer-events: none;
+}
+
+.pad-line::before {
+  content: "×";
+  position: absolute;
+  left: 0;
+  bottom: 2px;
+  color: var(--paper-text);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.sign-body .pad-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--paper-text);
+  pointer-events: none;
+}
+
+.pad-wrap.has-ink .pad-placeholder {
+  display: none;
+}
+
+.sig-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin-top: 14px;
+}
+
+.sig-tools .spacer,
+.sign-foot .spacer {
+  flex: 1;
+}
+
+.swatches {
+  display: flex;
+  gap: 8px;
+}
+
+.swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid var(--surface-solid);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--border-strong);
+  cursor: pointer;
+}
+
+.swatch[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--text);
+}
+
+.swatch.black {
+  background: #111111;
+}
+
+.swatch.blue {
+  background: #1b3fa6;
+}
+
+.swatch.red {
+  background: #b3261e;
+}
+
+.range {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.range input {
+  width: 110px;
+  accent-color: var(--accent);
+}
+
+.btn {
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: #2e323c;
+}
+
+.btn:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+/* Type */
+
+.text-input {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  user-select: text;
+}
+
+.text-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-color: transparent;
+}
+
+.font-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  max-height: 252px;
+  margin-top: 14px;
+  overflow-y: auto;
+}
+
+.font-choice {
+  height: 72px;
+  padding: 0 16px;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  background: var(--paper);
+  font-size: 28px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.font-choice:hover {
+  border-color: #b7bdf5;
+}
+
+.font-choice[aria-checked="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Upload: the light checkerboard shows which parts became see-through. */
+
+.upload-preview {
+  display: grid;
+  place-items: center;
+  min-height: 200px;
+  padding: 16px;
+  border-radius: 14px;
+  background-color: var(--paper);
+  background-image: conic-gradient(#e7e5de 25%, transparent 0 50%, #e7e5de 0 75%, transparent 0);
+  background-size: 18px 18px;
+}
+
+#sig-upload {
+  max-width: 100%;
+  max-height: 200px;
+}
+
+.sign-body .upload-note {
+  margin: 0;
+  max-width: 340px;
+  color: #6f6b62;
+  text-align: center;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #c9cdd6;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.check:has(input:disabled) {
+  color: var(--faint);
+  cursor: default;
+}
+
+/* Footer */
+
+.sign-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 24px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.sign-foot button.primary {
+  height: 36px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sign-foot button.primary:disabled {
+  background: #2a2e48;
+  color: #6f7591;
+  cursor: default;
+}
+
+/* Saved signatures, in the dialog and in the pieces panel */
+
+.sig-grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sign-dialog .sig-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sig-item {
+  position: relative;
+}
+
+.sig-thumb {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 60px;
+  padding: 8px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--paper);
+  cursor: pointer;
+}
+
+.sign-dialog .sig-thumb {
+  height: 100px;
+  padding: 12px;
+}
+
+.sig-thumb:hover {
+  border-color: var(--accent);
+}
+
+.sig-thumb img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.icon-btn.sig-del {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: rgba(20, 21, 26, 0.88);
+  color: #fff;
+  opacity: 0;
+}
+
+.icon-btn.sig-del svg {
+  width: 13px;
+  height: 13px;
+}
+
+.sig-item:hover .sig-del,
+.sig-del:focus-visible {
+  opacity: 1;
+}
+
+.icon-btn.sig-del:hover {
+  background: #4a1d1d;
+  color: var(--danger);
+}
+
+.sig-section {
+  display: grid;
+  gap: 10px;
+}
+
+.sig-section .panel-head .link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sig-section .link-btn:hover {
+  background: var(--accent-soft);
+}
+
+.sig-section .link-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.4;
+}
+
+.sig-section .muted {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 13px;
+}
+
+/* Signature pieces are dark ink, so give their thumbnails paper behind them. */
+.piece.signature canvas {
+  background: var(--paper);
+}

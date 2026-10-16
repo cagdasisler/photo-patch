@@ -1,0 +1,51 @@
+{
+  "name": "photo-patch",
+  "productName": "Photo Patch",
+  "version": "1.0.0",
+  "description": "Copy a box from a picture and paste it over another spot in the same picture.",
+  "main": "src/main.js",
+  "author": "Cagdas Emre Isler",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "icon": "node scripts/make-icon.js",
+    "dist": "electron-builder --win"
+  },
+  "build": {
+    "appId": "app.photopatch.desktop",
+    "productName": "Photo Patch",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": true,
+      "include": "build/installer.nsh",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
+    }
+  },
+  "devDependencies": {
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
+    "electron": "^44.8.0",
+    "electron-builder": "^26.15.3"
+  }
+}
