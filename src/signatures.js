@@ -21,6 +21,7 @@ const Signatures = (() => {
     'Gabriola',
   ];
   const ICON_X = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+  const ICON_PLUS = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>';
 
   const dialog = document.getElementById('sign-dialog');
   const pad = document.getElementById('sig-pad');
@@ -37,7 +38,8 @@ const Signatures = (() => {
   const useButton = dialog.querySelector('[data-sign="use"]');
   const savedEmpty = document.getElementById('saved-empty');
   const savedNote = document.getElementById('saved-note');
-  const lists = [document.getElementById('sig-list'), document.getElementById('sig-dialog-list')].filter(Boolean);
+  const savedHint = document.getElementById('saved-hint');
+  const savedList = document.getElementById('sig-dialog-list');
 
   const s = {
     saved: [], // { id, dataUrl, createdAt }, newest first
@@ -354,37 +356,45 @@ const Signatures = (() => {
   /* ---------------------------------------------------------------------- */
 
   function renderSaved() {
-    for (const list of lists) {
-      const items = s.saved.map((entry) => {
-        const li = document.createElement('li');
-        li.className = 'sig-item';
+    const items = s.saved.map((entry) => {
+      const li = document.createElement('li');
+      li.className = 'sig-item';
 
-        const pick = document.createElement('button');
-        pick.type = 'button';
-        pick.className = 'sig-thumb';
-        pick.dataset.useSaved = entry.id;
-        pick.title = 'Add this signature to the picture';
-        const img = document.createElement('img');
-        img.src = entry.dataUrl;
-        img.alt = 'Saved signature';
-        img.draggable = false;
-        pick.append(img);
+      const pick = document.createElement('button');
+      pick.type = 'button';
+      pick.className = 'sig-thumb';
+      pick.dataset.useSaved = entry.id;
+      pick.title = 'Add this signature to the picture';
+      const img = document.createElement('img');
+      img.src = entry.dataUrl;
+      img.alt = 'Saved signature';
+      img.draggable = false;
+      pick.append(img);
 
-        const del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'icon-btn sig-del';
-        del.dataset.deleteSaved = entry.id;
-        del.title = 'Delete this saved signature';
-        del.setAttribute('aria-label', 'Delete saved signature');
-        del.innerHTML = ICON_X;
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'icon-btn sig-del';
+      del.dataset.deleteSaved = entry.id;
+      del.title = 'Delete this saved signature';
+      del.setAttribute('aria-label', 'Delete saved signature');
+      del.innerHTML = ICON_X;
 
-        li.append(pick, del);
-        return li;
-      });
-      list.replaceChildren(...items);
-    }
-    const empty = document.getElementById('sigs-empty');
-    if (empty) empty.hidden = s.saved.length > 0;
+      li.append(pick, del);
+      return li;
+    });
+
+    // The last tile starts a new signature on the Draw tab.
+    const add = document.createElement('li');
+    add.className = 'sig-item';
+    const addButton = document.createElement('button');
+    addButton.type = 'button';
+    addButton.className = 'sig-thumb sig-new';
+    addButton.dataset.sign = 'new';
+    addButton.title = 'Draw, type or upload a new signature';
+    addButton.innerHTML = `${ICON_PLUS}<span>New signature</span>`;
+    add.append(addButton);
+
+    savedList.replaceChildren(...items, add);
     savedEmpty.hidden = s.saved.length > 0;
   }
 
@@ -440,17 +450,15 @@ const Signatures = (() => {
     updateUI();
   }
 
-  for (const list of lists) {
-    list.addEventListener('click', (e) => {
-      const del = e.target.closest('[data-delete-saved]');
-      if (del) {
-        deleteSaved(del.dataset.deleteSaved);
-        return;
-      }
-      const pick = e.target.closest('[data-use-saved]');
-      if (pick) placeSaved(pick.dataset.useSaved);
-    });
-  }
+  savedList.addEventListener('click', (e) => {
+    const del = e.target.closest('[data-delete-saved]');
+    if (del) {
+      deleteSaved(del.dataset.deleteSaved);
+      return;
+    }
+    const pick = e.target.closest('[data-use-saved]');
+    if (pick) placeSaved(pick.dataset.useSaved);
+  });
 
   /* ---------------------------------------------------------------------- */
   /* Dialog                                                                 */
@@ -483,6 +491,7 @@ const Signatures = (() => {
     keepInput.disabled = !hasImage;
     if (!hasImage) keepInput.checked = true;
     savedNote.hidden = hasImage || s.saved.length === 0;
+    savedHint.hidden = !hasImage || s.saved.length === 0;
   }
 
   function currentSignature() {
@@ -533,6 +542,7 @@ const Signatures = (() => {
     const command = e.target.closest('[data-sign]')?.dataset.sign;
     if (command === 'close') dialog.close();
     else if (command === 'use') useSignature();
+    else if (command === 'new') setTab('draw');
     else if (command === 'choose-file') chooseUpload();
     else if (command === 'undo-stroke') {
       s.strokes.pop();
@@ -547,7 +557,7 @@ const Signatures = (() => {
 
   function open() {
     if (dialog.open) return;
-    s.tab = s.saved.length > 0 && editor.hasImage() ? 'saved' : 'draw';
+    s.tab = s.saved.length > 0 ? 'saved' : 'draw';
     s.strokes = [];
     s.current = null;
     s.uploadSource = null;

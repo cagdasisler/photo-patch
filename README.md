@@ -10,8 +10,8 @@ Pasted pieces sit on top of your photo. They hide what's underneath without eras
 
 Get the latest version from the [Releases page](https://github.com/cagdasisler/photo-patch/releases):
 
-- **Photo Patch-Setup-x.y.z.exe**: installs the app and adds Start menu and desktop shortcuts.
-- **Photo Patch-Portable-x.y.z.exe**: runs on its own, with nothing to install.
+- **Photo.Patch-Setup-x.y.z.exe**: installs the app and adds Start menu and desktop shortcuts.
+- **Photo.Patch-Portable-x.y.z.exe**: runs on its own, with nothing to install.
 
 Windows SmartScreen may warn you the first time you run it, because the app isn't code-signed. Click **More info → Run anyway**.
 
@@ -33,7 +33,7 @@ Click **Sign** to draw, type or upload a signature:
 - **Type** your name and pick a handwriting style.
 - **Upload** a photo or scan of your signature. Photo Patch can remove the paper background for you.
 
-Keep **Save for later** ticked, and the signature will appear under *My signatures* in the side panel. From there you can add it to any picture with one click.
+Keep **Save for later** ticked, and the signature is kept for next time. Once you have saved signatures, **Sign** opens on the **Saved** tab: click one to add it to the picture, or click **New signature** to make another.
 
 ### Keyboard shortcuts
 
